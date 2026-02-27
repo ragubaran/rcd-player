@@ -126,6 +126,11 @@ fn convert_path_to_asset(path: String) -> String {
     path
 }
 
+#[tauri::command]
+async fn read_video_file(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path).map_err(|e| e.to_string())
+}
+
 // ── App entry ─────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -147,6 +152,7 @@ pub fn run() {
             get_course_stats,
             get_all_progress,
             convert_path_to_asset,
+            read_video_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

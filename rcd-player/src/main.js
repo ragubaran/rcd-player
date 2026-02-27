@@ -1,13 +1,6 @@
-// catch unhandled promise rejections (e.g. video aborts)
-window.addEventListener('unhandledrejection', ev => {
-  console.warn('unhandled promise rejection', ev.reason);
-  ev.preventDefault();
-});
-
 // ── Tauri API bridge ─────────────────────────────────────────────
-const { invoke, convertFileSrc } = window.__TAURI__.core;
+const { invoke } = window.__TAURI__.core;
 const { open: openDialog } = window.__TAURI__.dialog;
-// fs API is available on window.__TAURI__ when plugin is loaded
 
 
 // normalize file:// URLs returned by API
@@ -93,6 +86,12 @@ function bindControls() {
 // ── Folder management ─────────────────────────────────────────────
 async function pickFolder() {
   try {
+    const openDialog = window.__TAURI__?.dialog?.open;
+    console.log('window.__TAURI__.dialog.open', openDialog);
+    if (typeof openDialog !== 'function') {
+      throw new Error('dialog API unavailable');
+    }
+
     let selected = await openDialog({
       directory: true,
       multiple: false,
@@ -104,6 +103,7 @@ async function pickFolder() {
     console.log('picked folder', selected);
     await loadFolder(selected);
   } catch (err) {
+    console.error('pickFolder error', err);
     toast('Error opening folder: ' + err);
   }
 }
@@ -226,19 +226,7 @@ async function playVideoByPath(path) {
   await loadCurrentVideo();
 }
 
-async function getVideoUrl(path) {
-  try {
-    // readBinaryFile is available on the Tauri global when the fs plugin is enabled
-    const bin = await window.__TAURI__.fs.readBinaryFile({ path });
-    const blob = new Blob([new Uint8Array(bin)], { type: 'video/mp4' });
-    const url = URL.createObjectURL(blob);
-    console.log('blob url created for', path);
-    return url;
-  } catch (e) {
-    console.error('failed to read video file', e);
-    return null;
-  }
-}
+let currentBlobUrl = null;
 
 async function loadCurrentVideo() {
   if (state.currentIndex < 0 || state.currentIndex >= state.flatVideos.length) return;
@@ -252,17 +240,26 @@ async function loadCurrentVideo() {
     activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
-  // Convert file path to asset URL for Tauri
-  console.log('loading video', videoFile.path);
-  const assetUrl = await getVideoUrl(videoFile.path);
-  console.log('assetUrl', assetUrl);
-  if (assetUrl) {
-    video.src = assetUrl;
-    video.load();
-  } else {
-    console.error('unable to obtain video url for', videoFile.path);
+  // Revoke previous blob URL to free memory
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl);
+    currentBlobUrl = null;
+  }
+
+  // Read file via Rust and create a blob URL
+  try {
+    const bytes = await invoke('read_video_file', { path: videoFile.path });
+    const ext = videoFile.path.split('.').pop().toLowerCase();
+    const mime = { mp4: 'video/mp4', mkv: 'video/x-matroska', mov: 'video/quicktime', avi: 'video/x-msvideo', webm: 'video/webm', m4v: 'video/mp4' }[ext] || 'video/mp4';
+    const blob = new Blob([new Uint8Array(bytes)], { type: mime });
+    currentBlobUrl = URL.createObjectURL(blob);
+  } catch (e) {
+    toast('Failed to load video: ' + e);
     return;
   }
+
+  video.src = currentBlobUrl;
+  video.load();
 
   $('video-placeholder').style.display = 'none';
   video.style.display = 'block';
