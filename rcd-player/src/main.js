@@ -7,7 +7,7 @@ window.addEventListener('unhandledrejection', ev => {
 // ── Tauri API bridge ─────────────────────────────────────────────
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { open: openDialog } = window.__TAURI__.dialog;
-import { readBinaryFile } from '@tauri-apps/api/fs';
+// fs API is available on window.__TAURI__ when plugin is loaded
 
 
 // normalize file:// URLs returned by API
@@ -228,7 +228,8 @@ async function playVideoByPath(path) {
 
 async function getVideoUrl(path) {
   try {
-    const bin = await readBinaryFile({ path });
+    // readBinaryFile is available on the Tauri global when the fs plugin is enabled
+    const bin = await window.__TAURI__.fs.readBinaryFile({ path });
     const blob = new Blob([new Uint8Array(bin)], { type: 'video/mp4' });
     const url = URL.createObjectURL(blob);
     console.log('blob url created for', path);
