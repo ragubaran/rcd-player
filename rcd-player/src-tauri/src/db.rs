@@ -5,7 +5,7 @@ use dirs;
 pub fn get_db_path() -> PathBuf {
     let data_dir = dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("CoursePlayer");
+        .join("RCD_Player");
     std::fs::create_dir_all(&data_dir).ok();
     data_dir.join("progress.db")
 }
